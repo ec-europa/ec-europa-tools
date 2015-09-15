@@ -48,10 +48,14 @@ function _drush_command_check_module_duplicates($multisite_path = '') {
   chdir($subsite_path);
 
   //Print the subsite path
+  drush_print("\n");
   drush_print($subsite_path);
 
   //The subsite does not have custom modules
-  if(!is_dir($subsite_modules_path)) return;
+  if(!is_dir($subsite_modules_path)) {
+    drush_print('The subsite does not have custom modules.');
+    return;
+  }
 
   //Execute the drush command to find our the enabled modules
   exec("drush pml --type=module --status=enabled --no-core --format=csv", $modules);
@@ -82,6 +86,9 @@ function _drush_command_check_module_duplicates($multisite_path = '') {
     }
   }
 
+  //Array for storing the duplicates
+  $duplicate_modules = array();
+
   //Check the multisite modules
   foreach($core_paths as $path) {
     foreach ($enabled_local_modules as $module_info) {
@@ -97,7 +104,7 @@ function _drush_command_check_module_duplicates($multisite_path = '') {
           //check if the folder is a module folder or not
           if (file_exists($info_file)) {
             $info = drupal_parse_info_file($info_file);
-            drush_print($info['name'] . ',' . $module_info['name'] . ',' . $module_info['version'] . ',' . $info['version']);
+            $duplicate_modules[] = $info['name'] . ',' . $module_info['name'] . ',' . $module_info['version'] . ',' . $info['version'];
           }
         }
       }
@@ -105,6 +112,17 @@ function _drush_command_check_module_duplicates($multisite_path = '') {
       //reset the $multisite_module variable
       $multisite_module = array();
     }
+  }
+
+  //printing the results
+  if(!empty($duplicate_modules)) {
+    drush_print("-------------------------------------------------------");
+    drush_print("Module name,Module ID,Subsite version,Multisite version");
+    drush_print("-------------------------------------------------------");
+    drush_print(implode("\n",$duplicate_modules));
+  }
+  else {
+    drush_print('No duplicate modules found.');
   }
 
 }
