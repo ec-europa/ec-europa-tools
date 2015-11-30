@@ -27,23 +27,10 @@ function check_used_modules_drush_command() {
  * @param string $multisite_path
  *   multisite absolute path
  */
-function _drush_command_check_used_modules($multisite_path = '', $modules_tocheck) {
+function _drush_command_check_used_modules($modules_tocheck) {
 
   //subsite absolute path
   $subsite_path = $_SERVER['PWD'];
-
-  //multisite absolute path
-  if($multisite_path == '') {
-    $multisite_path = getcwd();
-  }
-
-  //Paths from the multisite where to look for duplicates
-  $core_paths = array(
-    $multisite_path.'/sites/all/modules',
-    $multisite_path.'/profiles');
-
-  $enabled_local_modules = array();
-  $subsite_modules_path = $subsite_path.'/modules';
 
   //Navigate to the subsite folder
   chdir($subsite_path);
@@ -52,11 +39,6 @@ function _drush_command_check_used_modules($multisite_path = '', $modules_tochec
   drush_print("\n");
   drush_print($subsite_path);
 
-  //The subsite does not have custom modules
-  if(!is_dir($subsite_modules_path)) {
-    drush_print('The subsite does not have custom modules.');
-    return;
-  }
 
   // Replace spaced betweend modules with pipe (|) for grepping
   $modules_tocheck = str_replace(' ', '|', $modules_tocheck);

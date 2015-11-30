@@ -30,6 +30,6 @@ for i in $(find $sites_folder -maxdepth 1 -mindepth 1 -type d)    # loop through
     containsElement $(basename $i) "${exclude_folders[@]}"        # checks if the folder is all or default folder
     if [ $? == 0 ]; then                                          # it's not all or default folder
        cd $i                                                      # navigate to the subsite's folder
-       drush dcum $1 "$2"                                                # run the drush command with it's arguments
+       drush dcum "$2"                                                # run the drush command with it's arguments
     fi
   done
