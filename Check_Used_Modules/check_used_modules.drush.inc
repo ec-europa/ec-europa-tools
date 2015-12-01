@@ -39,6 +39,8 @@ function _drush_command_check_used_modules($modules_tocheck) {
   drush_print("\n");
   drush_print($subsite_path);
 
+  //$schema = drupal_get_schema();
+  //drush_print_r($schema);
 
   // Replace spaced betweend modules with pipe (|) for grepping
   $modules_tocheck = str_replace(' ', '|', $modules_tocheck);
@@ -48,12 +50,26 @@ function _drush_command_check_used_modules($modules_tocheck) {
 
   $found_modules = array();
   foreach($modules as $module) {
+
     $module_info = explode(',',$module);
 
-    //Get the module name
+    //Get the module name, module name is located at $result[1]
     preg_match('#\((.*?)\)#', $module_info[count($module_info) - 2], $result);
-    $found_modules[] = $result[1];
 
+    /**
+     * Since js_injector and css_injector were implemented as platform "dependencies"
+     * We perform a specific query to check if the site also has data in the database
+     * for this module.
+     */
+    if ($result[1] == 'js_injector' || $result[1] == 'css_injector') {
+      $query = db_query("SELECT crid FROM {".$result[1]."_rule} LIMIT 1")->rowCount();
+      if ($query == 1) {
+        $found_modules[] = $result[1]." (with data in database!)";
+      }
+      else {
+        $found_modules[] = $result[1];
+      }
+    }
   }
 
   //printing the results
