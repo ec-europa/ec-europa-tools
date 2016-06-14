@@ -68,6 +68,9 @@ function _drush_command_check_used_modules($modules_tocheck) {
         $found_modules[] = $result[1];
       }
     }
+    else if ($result[1]) {
+      $found_modules[] = $result[1];
+    }
   }
 
   //printing the results
