@@ -32,9 +32,6 @@ function _drush_command_check_used_modules($modules_to_check) {
   //subsite absolute path
   $subsite_path = $_SERVER['PWD'];
 
-  //Navigate to the subsite folder
-  chdir($subsite_path);
-
   //Print the subsite path
   drush_print("\n");
   drush_print($subsite_path);
