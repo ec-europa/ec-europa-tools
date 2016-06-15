@@ -27,7 +27,7 @@ function check_used_modules_drush_command() {
  * @param string $multisite_path
  *   multisite absolute path
  */
-function _drush_command_check_used_modules($modules_tocheck) {
+function _drush_command_check_used_modules($modules_to_check) {
 
   //subsite absolute path
   $subsite_path = $_SERVER['PWD'];
@@ -39,19 +39,33 @@ function _drush_command_check_used_modules($modules_tocheck) {
   drush_print("\n");
   drush_print($subsite_path);
 
-  // Replace spaced betweend modules with pipe (|) for grepping
-  $modules_tocheck = str_replace(' ', '|', $modules_tocheck);
+  // Replace spaces between modules with pipe (|) and escape them for regular
+  // expression matching.
+  $modules_to_check = preg_split('/\s+/', $modules_to_check);
+  $modules_to_check = array_map(
+    function ($module) {
+      return preg_quote($module);
+    },
+    $modules_to_check
+  );
+  $modules_to_check = '/' . implode('|', $modules_to_check) . '/';
+  
+  $extensions = system_rebuild_module_data();
 
-  //Execute the drush command to find our the enabled modules
-  exec("drush pml --type=module --status=enabled --no-core --format=csv | grep -E '".$modules_tocheck."'", $modules);
+  // Filter on enabled modules only.
+  $extensions = array_filter($extensions, function ($project) {
+    return 1 == $project->status && 'module' == $project->type;
+  });
 
   $found_modules = array();
-  foreach($modules as $module) {
 
-    $module_info = explode(',',$module);
+  foreach ($extensions as $extension) {
 
-    //Get the module name, module name is located at $result[1]
-    preg_match('#\((.*?)\)#', $module_info[count($module_info) - 2], $result);
+    if (1 !== preg_match($modules_to_check, $extension->name) &&
+        1 !== preg_match($modules_to_check, $extension->info->name)
+    ) {
+      continue;
+    }
 
     /**
      * Since js_injector and css_injector were implemented as platform "dependencies"
@@ -59,17 +73,17 @@ function _drush_command_check_used_modules($modules_tocheck) {
      * for this module.
      * @todo replace this with a generic schema implementation
      */
-    if ($result[1] == 'js_injector' || $result[1] == 'css_injector') {
-      $query = db_query("SELECT crid FROM {".$result[1]."_rule} LIMIT 1")->rowCount();
+    if ($extension->name == 'js_injector' || $extension->name == 'css_injector') {
+      $query = db_query("SELECT crid FROM {".$extension->name."_rule} LIMIT 1")->rowCount();
       if ($query == 1) {
-        $found_modules[] = $result[1]." (with data in database!)";
+        $found_modules[] = $extension->name." (with data in database!)";
       }
       else {
-        $found_modules[] = $result[1];
+        $found_modules[] = $extension->name;
       }
     }
-    else if ($result[1]) {
-      $found_modules[] = $result[1];
+    else if ($extension->name) {
+      $found_modules[] = $extension->name;
     }
   }
 
