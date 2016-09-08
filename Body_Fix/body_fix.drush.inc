@@ -52,7 +52,71 @@ function drush_body_fix_list_impacted_sites($timestamp = 1472562000) {
   drush_print('');
   drush_print(dt('Body translatable: @flag', array('@flag' => $result)));
 
-  // 3. Retrieving content type having translation mode other than Entity
+  // 3. Check if the field value are aligned with the flag retrieved above, and
+  // in the case of the flag above = 1),with the node language.
+  if ($result) {
+    $query = db_select('field_data_body', 'fdb');
+    $query->join('node', 'n', 'fdb.entity_id = n.nid');
+    $query->condition('fdb.entity_type', 'node')
+          ->condition('fdb.language', 'n.language', '<>');
+    $query->fields('fdb', array('entity_id', 'revision_id', 'bundle', 'language'));
+
+    $data_results = $query->execute()->fetchAll();
+
+    if ($data_results) {
+      drush_print(dt('WARNING @nr values of "field_DATA_body" field have a different language than the node', array('@nr' => count($data_results))));
+    }
+    else {
+      drush_print(dt('OK no value of "field_DATA_body" field have a different language than the node'));
+    }
+
+    $query = db_select('field_revision_body', 'frb');
+    $query->join('node_revision', 'nr', 'frb.revision_id = nr.vid');
+    $query->condition('frb.entity_type', 'node')
+         ->condition('frb.language', 'nr.language', '<>');
+    $query->fields('frb', array('entity_id', 'revision_id', 'bundle', 'language'));
+
+    $revision_results = $query->execute()->fetchAll();
+
+    if ($revision_results) {
+      drush_print(dt('WARNING @nr values of "field_REVISION_body" field have language <> "und"', array('@nr' => count($revision_results))));
+    }
+    else {
+      drush_print(dt('OK no value of "field_REVISION_body" field have language <> "und"'));
+    }
+
+  }
+  else {
+    $query = db_select('field_data_body', 'fdb')
+      ->condition('fdb.entity_type', 'node')
+      ->condition('fdb.language', LANGUAGE_NONE, '<>');
+    $query->fields('fdb', array('entity_id', 'revision_id', 'bundle', 'language'));
+
+    $data_results = $query->execute()->fetchAll();
+
+    if ($data_results) {
+      drush_print(dt('WARNING @nr values of "field_DATA_body" field have language <> "und', array('@nr' => count($data_results))));
+    }
+    else {
+      drush_print(dt('OK no value of "field_DATA_body" field have language <> "und'));
+    }
+
+    $query = db_select('field_revision_body', 'frb')
+      ->condition('frb.entity_type', 'node')
+      ->condition('frb.language', LANGUAGE_NONE, '<>');
+    $query->fields('frb', array('entity_id', 'revision_id', 'bundle', 'language'));
+
+    $revision_results = $query->execute()->fetchAll();
+
+    if ($revision_results) {
+      drush_print(dt('WARNING @nr values of "field_REVISION_body" field have language <> "und', array('@nr' => count($revision_results))));
+    }
+    else {
+      drush_print(dt('OK no value of "field_REVISION_body" field have language <> "und'));
+    }
+  }
+
+  // 4. Retrieving content type having translation mode other than Entity
   // translation.
   $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2, 4));
 
@@ -102,25 +166,37 @@ function drush_body_fix_list_impacted_sites($timestamp = 1472562000) {
   }
 
   drush_print('');
-  // 4. Detect if the duplicates exists in field_data_body.
-  $duplicates = db_query("SELECT b1.entity_id as nid, b1.revision_id as vid, b1.bundle as bundle, n.uid as user_id, u.name as user_name
-     FROM {field_data_body} as b1, field_data_body as b2, {node} as n, {users} as u WHERE b1.entity_id = n.nid AND n.uid = u.uid AND
-     b1.entity_id = b2.entity_id AND b1.revision_id = b2.revision_id AND b1.language = 'und' AND b2.language <> 'und' AND
-     ( b1.body_value <> b2.body_value OR b1.body_summary <> b2.body_summary)")->execute();
+  // 5. Detect if the duplicates exists in field_data_body.
+  $duplicates = db_query("SELECT b1.entity_id, b1.revision_id, u.uid as user_id,
+    u.name as user_name
+    FROM node as n INNER JOIN field_data_body as b1 ON b1.entity_id = n.nid
+    INNER JOIN field_data_body as b2 ON b2.entity_id = n.nid
+    INNER JOIN node_revision as nr ON n.vid = nr.vid
+    INNER JOIN users as u ON nr.uid = u.uid WHERE b1.revision_id = b2.revision_id AND
+    b1.language = 'und' AND b2.language <> 'und'
+    AND ( b1.body_value <> b2.body_value OR b1.body_summary <> b2.body_summary)");
 
-  if (is_array($duplicates) && !empty($duplicates)) {
+  if (!empty($duplicates)) {
     drush_print(dt('NOK duplicates found in the field_body_table'));
+    $header = array(
+      dt('Content ID'),
+      dt('Revision ID'),
+      dt('Content type'),
+      dt('User ID'),
+      dt('User Name'),
+    );
+    $values = array();
     foreach ($duplicates as $duplicate) {
-      drush_print(dt('|Content ID|Revision ID|Content type|User ID|User Name|'));
-      $param = array(
-        '@nid' => $duplicate->nid,
-        '@vid' => $duplicate->vid,
-        '@bundle' => $duplicate->bundle,
-        '@uid' => $duplicate->user_id,
-        '@name' => $duplicate->user_name,
+      $value = array(
+        $duplicate->nid,
+        $duplicate->vid,
+        $duplicate->bundle,
+        $duplicate->user_id,
+         $duplicate->user_name,
       );
-      drush_print(dt('|@nid|@vid|@bundle|@uid|@name|', $param));
+      $values[] = $value;
     }
+    drush_print_table($values, $header);
   }
   else {
     drush_print(dt('OK No duplicates found in the field_body_table'));
