@@ -165,6 +165,7 @@ function drush_body_fix_list_impacted_sites($timestamp = 1472562000) {
     }
   }
 
+/*
   drush_print('');
   // 5. Detect if the duplicates exists in field_data_body.
   $duplicates = db_query("SELECT b1.entity_id, b1.revision_id, u.uid as user_id,
@@ -206,7 +207,7 @@ function drush_body_fix_list_impacted_sites($timestamp = 1472562000) {
   drush_print(dt('End body_fix_list_impacted_sites for"@name" site (@url)', array('@name' => $site_name, '@url' => $base_url)));
   drush_print('');
 }
-
+*/
 
 /**
  * Retrieves the translation mode label for a mode code.
