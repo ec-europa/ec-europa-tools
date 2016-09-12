@@ -28,10 +28,13 @@ function body_fix_drush_command() {
   return $items;
 }
 
+/**
+ * Drush command callback. drush_body_fix_translation_mode_statistics.
+ */
 function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
 
   global $base_url;
-  $site_name = variable_get('site_name','Unnamed site');
+  $site_name = variable_get('site_name', 'Unnamed site');
 
   drush_print(dt('Start body_fix_list_impacted_sites for "@name" site (@url)', array('@name' => $site_name, '@url' => $base_url)));
   drush_print('');
@@ -51,13 +54,15 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
     drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is executed!'));
   }
 
-  // 2. Retrieving content type having translation mode other than Entity translation
+  // 2. Retrieving content type having translation mode other than
+  // Entity translation.
   $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2));
   if (!$types) {
     drush_print(dt('All content types are using "Entity translation" mode'));
   }
 
-  // For next steps, we load need the full list of content types using body fields.
+  // For next steps, we load need the full list of content types using
+  // body fields.
   $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2, 4));
 
   $update_start = $timestamp;
@@ -77,7 +82,7 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
   $query->condition('fdb.entity_type', 'node')
     ->condition('n.changed', $update_start, '>=')
     ->condition('fdb.bundle', $type_names, 'IN');
-  $query->fields('fdb', array('bundle', ));
+  $query->fields('fdb', array('bundle'));
   $query->addExpression('count(fdb.entity_id)', 'content_count');
   $query->groupBy("fdb.bundle");
   $content_results = $query->execute()->fetchAllAssoc('bundle');
@@ -85,18 +90,26 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
   $query = db_select('field_data_body', 'fdb');
   $query->join('node', 'n', 'n.nid = fdb.entity_id');
   $query->condition('fdb.entity_type', 'node');
-  $query->fields('fdb', array('bundle', ));
+  $query->fields('fdb', array('bundle'));
   $query->addExpression('count(fdb.entity_id)', 'total_count');
   $query->groupBy("fdb.bundle");
   $total_results = $query->execute()->fetchAllAssoc('bundle');
 
   drush_print(' ');
-  drush_print(dt('Tables below show for each content type that does not use entity translation,
-  the used translation mode created after the hook_update_7003 execution and the total of contents
-  using the body field.'));
-
-  $values = array([ dt('CONTENT TYPE'), dt('TRANSLATION MODE'), dt('NODE #'), dt('NODE REVISION #'), dt('NODE TOTAL #')]);
-  foreach($types as $machine_name => $type) {
+  $date = new DateTime("@" . $timestamp);
+  $date->setTimezone(new DateTimeZone('Europe/Brussels'));
+  $str_date = $date->format('d/m/y H:i:s');
+  drush_print(dt('Statistics about content created/edited after @date', array('@date' => $str_date)));
+  drush_print('==================================================================');
+  $values = array();
+  $values[] = array(
+    dt('CONTENT TYPE'),
+    dt('TRANSLATION MODE'),
+    dt('NODE #'),
+    dt('NODE REVISION #'),
+    dt('NODE TOTAL #'),
+  );
+  foreach ($types as $machine_name => $type) {
     $content_nr = 0;
     if (isset($content_results[$machine_name]) && $content_results[$machine_name]->content_count) {
       $content_nr = $content_results[$machine_name]->content_count;
@@ -112,7 +125,7 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
 
     $trans_mode = $type->trans_mode;
     $trans_label = _body_fix_list_get_translation_mode_label($trans_mode);
-    $values[]= array(
+    $values[] = array(
       $machine_name,
       $trans_label,
       $content_nr,
@@ -356,7 +369,7 @@ function drush_body_fix_list_impacted_sites() {
  *   - 'revision': array concering the field related field_revision table
  *     (e.g. field_revision_body).
  */
-function _body_fix_check_content_type_translation($bundle, $trans_mode, $field_name, $field_translatable = FALSE, $from_time) {
+function _body_fix_check_content_type_translation($bundle, $trans_mode, $field_name, $field_translatable = FALSE) {
   $problem_nr = array(
     'data' => 0,
     'revision' => 0,
