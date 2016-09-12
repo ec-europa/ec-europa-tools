@@ -144,29 +144,43 @@ class ContentTranslationFixProcessor {
 
   /**
    * Process nodes with content translation enabled.
+   *
+   * @return int
+   *    Total number of nodes processed.
    */
   public function processContentTranslationNodes() {
+    $total = 0;
     $rows = $this->getLatestContent();
     foreach ($rows as $row) {
       if ($this->isContentTranslationEnabled($row->type) && $this->hasTranslatedRevision($row->nid, $row->type)) {
         $this->processNode($row);
+        $total++;
       }
     }
+    return $total;
   }
 
   /**
    * Process nodes with translation disabled.
+   *
+   * @return int
+   *    Total number of nodes processed.
    */
   public function processTranslationDisabledNodes() {
+    $total = 0;
     $rows = $this->getLatestContent();
     foreach ($rows as $row) {
       if ($this->isTranslationDisabled($row->type)) {
         $this->processNode($row);
+        $total++;
       }
     }
+    return $total;
   }
 
   /**
+   * Process given node.
+   *
    * @param $node
    */
   public function processNode($node) {
@@ -182,7 +196,8 @@ class ContentTranslationFixProcessor {
       ],
     ];
     $node->revision = TRUE;
-    db_query("DELETE FROM {field_revision_body} WHERE entity_type = 'node' AND entity_id = '{$revision['entity_id']}' AND revision_id = '{$revision['revision_id']}' AND language = '{$revision['language']}'")->execute();
+    // We keep body revisions for backup.
+    // db_query("DELETE FROM {field_revision_body} WHERE entity_type = 'node' AND entity_id = '{$revision['entity_id']}' AND revision_id = '{$revision['revision_id']}' AND language = '{$revision['language']}'")->execute();
     db_query("DELETE FROM {field_data_body} WHERE entity_type = 'node' AND entity_id = '{$revision['entity_id']}' AND revision_id = '{$revision['revision_id']}' AND language = '{$revision['language']}'")->execute();
     node_save($node);
     echo '.';
@@ -190,8 +205,20 @@ class ContentTranslationFixProcessor {
 
 }
 
+echo 'Setting body field translation flag to 0...' . PHP_EOL;
+db_query("UPDATE field_config SET translatable = '0' WHERE field_name = 'body'")->execute();
+echo 'Done.' . PHP_EOL;
+
+echo 'Clearing cache...' . PHP_EOL;
+cache_clear_all();
+echo 'Done.' . PHP_EOL;
+
 // Process nodes.
+echo 'Processing nodes...' . PHP_EOL;
 $processor = new ContentTranslationFixProcessor();
-$processor->processContentTranslationNodes();
-$processor->processTranslationDisabledNodes();
-echo PHP_EOL;
+$content_translation = $processor->processContentTranslationNodes();
+$disabled_translation = $processor->processTranslationDisabledNodes();
+echo PHP_EOL . 'Done.' . PHP_EOL;
+echo 'Nodes with translation: ' . $content_translation . PHP_EOL;
+echo 'Nodes with translation disabled: ' . $disabled_translation . PHP_EOL;
+echo 'Total: ' . ($content_translation + $disabled_translation) . PHP_EOL;
