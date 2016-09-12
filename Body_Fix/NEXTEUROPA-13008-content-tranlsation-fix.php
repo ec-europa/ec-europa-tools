@@ -196,7 +196,8 @@ class ContentTranslationFixProcessor {
       ],
     ];
     $node->revision = TRUE;
-    db_query("DELETE FROM {field_revision_body} WHERE entity_type = 'node' AND entity_id = '{$revision['entity_id']}' AND revision_id = '{$revision['revision_id']}' AND language = '{$revision['language']}'")->execute();
+    // We keep body revisions for backup.
+    // db_query("DELETE FROM {field_revision_body} WHERE entity_type = 'node' AND entity_id = '{$revision['entity_id']}' AND revision_id = '{$revision['revision_id']}' AND language = '{$revision['language']}'")->execute();
     db_query("DELETE FROM {field_data_body} WHERE entity_type = 'node' AND entity_id = '{$revision['entity_id']}' AND revision_id = '{$revision['revision_id']}' AND language = '{$revision['language']}'")->execute();
     node_save($node);
     echo '.';
