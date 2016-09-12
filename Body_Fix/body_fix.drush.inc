@@ -10,17 +10,17 @@
 function body_fix_drush_command() {
   $items = array();
   $items['list-impacted-sites'] = array(
-    'description' => 'List the sites impacted by the body translatable issue.',
+    'description' => 'Lists the sites impacted by the body translatable issue.',
     'aliases' => array('lis'),
     'options' => array(
-      'complete-report' => 'Give a complete reports with problematic node data (0 & 1).',
+      'complete-report' => 'Gives a complete reports with problematic node data (0 & 1).',
       'list-revision-items' => 'List problematic records in revision table too (0 & 1).',
     ),
   );
   $items['translation-mode-statistics'] = array(
-    'description' => 'List the sites impacted by the body translatable issue.',
+    'description' => 'Gives statistics about contents created created after a specific time.',
     'arguments' => array(
-      'timestamp' => 'The timestamp when the body translatable causing issue has been executed.',
+      'timestamp' => 'The timestamp of the specific time to use as reference in the report.',
     ),
     'aliases' => array('tms'),
   );
