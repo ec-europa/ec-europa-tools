@@ -17,8 +17,113 @@ function body_fix_drush_command() {
       'list-revision-items' => 'List problematic records in revision table too (0 & 1).',
     ),
   );
+  $items['translation-mode-statistics'] = array(
+    'description' => 'List the sites impacted by the body translatable issue.',
+    'arguments' => array(
+      'timestamp' => 'The timestamp when the body translatable causing issue has been executed.',
+    ),
+    'aliases' => array('tms'),
+  );
 
   return $items;
+}
+
+function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
+
+  global $base_url;
+  $site_name = variable_get('site_name','Unnamed site');
+
+  drush_print(dt('Start body_fix_list_impacted_sites for "@name" site (@url)', array('@name' => $site_name, '@url' => $base_url)));
+  drush_print('');
+  require_once DRUPAL_ROOT . '/includes/install.inc';
+
+  // 1. Check the situation about the module "Nexteuropa Cod" module and the
+  // execution of the hook_update_7003.
+  $schema_version = drupal_get_installed_schema_version('nexteuropa_core');
+
+  if ($schema_version == SCHEMA_UNINSTALLED) {
+    drush_print(dt('"Nexteuropa Core" module is not enabled!'));
+  }
+  elseif ($schema_version < 7003) {
+    drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is NOT executed!'));
+  }
+  else {
+    drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is executed!'));
+  }
+
+  // 2. Retrieving content type having translation mode other than Entity translation
+  $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2));
+  if (!$types) {
+    drush_print(dt('All content types are using "Entity translation" mode'));
+  }
+
+  // For next steps, we load need the full list of content types using body fields.
+  $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2, 4));
+
+  $update_start = $timestamp;
+  $type_names = array_keys($types);
+  $query = db_select('field_revision_body', 'frb');
+  $query->join('node_revision', 'nr', 'nr.vid = frb.revision_id');
+  $query->condition('frb.entity_type', 'node')
+    ->condition('nr.timestamp', $update_start, '>=')
+    ->condition('frb.bundle', $type_names, 'IN');
+  $query->fields('frb', array('bundle'));
+  $query->addExpression('count(frb.entity_id)', 'revision_count');
+  $query->groupBy("frb.bundle");
+  $revision_results = $query->execute()->fetchAllAssoc('bundle');
+
+  $query = db_select('field_data_body', 'fdb');
+  $query->join('node', 'n', 'n.nid = fdb.entity_id');
+  $query->condition('fdb.entity_type', 'node')
+    ->condition('n.changed', $update_start, '>=')
+    ->condition('fdb.bundle', $type_names, 'IN');
+  $query->fields('fdb', array('bundle', ));
+  $query->addExpression('count(fdb.entity_id)', 'content_count');
+  $query->groupBy("fdb.bundle");
+  $content_results = $query->execute()->fetchAllAssoc('bundle');
+
+  $query = db_select('field_data_body', 'fdb');
+  $query->join('node', 'n', 'n.nid = fdb.entity_id');
+  $query->condition('fdb.entity_type', 'node');
+  $query->fields('fdb', array('bundle', ));
+  $query->addExpression('count(fdb.entity_id)', 'total_count');
+  $query->groupBy("fdb.bundle");
+  $total_results = $query->execute()->fetchAllAssoc('bundle');
+
+  drush_print(' ');
+  drush_print(dt('Tables below show for each content type that does not use entity translation,
+  the used translation mode created after the hook_update_7003 execution and the total of contents
+  using the body field.'));
+
+  $values = array([ dt('CONTENT TYPE'), dt('TRANSLATION MODE'), dt('NODE #'), dt('NODE REVISION #'), dt('NODE TOTAL #')]);
+  foreach($types as $machine_name => $type) {
+    $content_nr = 0;
+    if (isset($content_results[$machine_name]) && $content_results[$machine_name]->content_count) {
+      $content_nr = $content_results[$machine_name]->content_count;
+    }
+    $revision_nr = 0;
+    if (isset($revision_results[$machine_name]) && $revision_results[$machine_name]->revision_count) {
+      $revision_nr = $revision_results[$machine_name]->revision_count;
+    }
+    $total = 0;
+    if (isset($total_results[$machine_name]) && $total_results[$machine_name]->total_count) {
+      $total = $total_results[$machine_name]->total_count;
+    }
+
+    $trans_mode = $type->trans_mode;
+    $trans_label = _body_fix_list_get_translation_mode_label($trans_mode);
+    $values[]= array(
+      $machine_name,
+      $trans_label,
+      $content_nr,
+      $revision_nr,
+      $total,
+    );
+  }
+  drush_print_table($values, TRUE);
+  drush_print('');
+  drush_print(dt('End body_fix_list_impacted_sites for "@name" site (@url)', array('@name' => $site_name, '@url' => $base_url)));
+  drush_print('');
 }
 
 /**
@@ -251,7 +356,7 @@ function drush_body_fix_list_impacted_sites() {
  *   - 'revision': array concering the field related field_revision table
  *     (e.g. field_revision_body).
  */
-function _body_fix_check_content_type_translation($bundle, $trans_mode, $field_name, $field_translatable = FALSE) {
+function _body_fix_check_content_type_translation($bundle, $trans_mode, $field_name, $field_translatable = FALSE, $from_time) {
   $problem_nr = array(
     'data' => 0,
     'revision' => 0,
