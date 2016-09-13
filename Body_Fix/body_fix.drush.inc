@@ -22,6 +22,10 @@ function body_fix_drush_command() {
     'arguments' => array(
       'timestamp' => 'The timestamp of the specific time to use as reference in the report. (default value: 1472562000)',
     ),
+    'options' => array(
+      'scan-entity-use' => 'Scan the field use through all entity bundles.',
+      'scan-entity-use-only' => 'Gives only statistics on the field use through all entity bundles.',
+    ),
     'aliases' => array('tms'),
   );
 
@@ -32,6 +36,8 @@ function body_fix_drush_command() {
  * Drush command callback. drush_body_fix_translation_mode_statistics.
  */
 function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
+
+  $scan_entity_use_only = drush_get_option('scan-entity-use-only', 0);
   $field_name = 'body';
   global $base_url;
   $site_name = variable_get('site_name', 'Unnamed site');
@@ -46,22 +52,23 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
 
   // 1. Check the situation about the module "Nexteuropa Core" module and the
   // execution of the hook_update_7003.
-  $schema_version = drupal_get_installed_schema_version('nexteuropa_core');
+  if (!$scan_entity_use_only) {
+    $schema_version = drupal_get_installed_schema_version('nexteuropa_core');
 
-  if ($schema_version == SCHEMA_UNINSTALLED) {
-    drush_print(dt('"Nexteuropa Core" module is not enabled!'));
-  }
-  elseif ($schema_version < 7003) {
-    drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is NOT executed!'));
-  }
-  else {
-    drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is executed!'));
-  }
+    if ($schema_version == SCHEMA_UNINSTALLED) {
+      drush_print(dt('"Nexteuropa Core" module is not enabled!'));
+    }
+    elseif ($schema_version < 7003) {
+      drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is NOT executed!'));
+    }
+    else {
+      drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is executed!'));
+    }
 
-  drush_print(' ');
-  drush_print('+++++++++++++++++++++++++++++++++++++++++++++++++++');
-  drush_print(' ');
-
+    drush_print(' ');
+    drush_print('+++++++++++++++++++++++++++++++++++++++++++++++++++');
+    drush_print(' ');
+  }
   // 2. Current value for the body translatable flag.
   $field_info = field_info_field($field_name);
   $flag = $field_info['translatable'];
@@ -69,114 +76,117 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
 
   drush_print(dt('@field translatable: @flag', array('@flag' => $flag, '@field' => $field_name)));
   drush_print(dt('@field cardinality: @cardinality', array('@cardinality' => $cardinality, '@field' => $field_name)));
-
-  $uses_list = array();
-  $instances = field_info_instances();
-  foreach ($instances as $entity_type => $type_bundles) {
-    foreach ($type_bundles as $bundle => $bundle_instances) {
-      if (isset($bundle_instances[$field_name])) {
-        $uses_list[] = [$entity_type, $bundle];
+  $scan_entity_use = drush_get_option('scan-entity-use', 0);
+  if ($scan_entity_use || $scan_entity_use_only) {
+    $uses_list = array();
+    $instances = field_info_instances();
+    foreach ($instances as $entity_type => $type_bundles) {
+      foreach ($type_bundles as $bundle => $bundle_instances) {
+        if (isset($bundle_instances[$field_name])) {
+          $uses_list[] = [$entity_type, $bundle];
+        }
       }
     }
+    if ($uses_list) {
+      drush_print(dt('Use of @field:', array('@field' => $field_name)));
+      $header = array('ENTITY TYPE', "BUNDLE");
+      array_unshift($uses_list, $header);
+      drush_print_table($uses_list, TRUE);
+    }
+    else {
+      drush_print(dt('@field is never used.', array('@field' => $field_name)));
+    }
   }
-  if ($uses_list) {
-    drush_print(dt('Use of @field:', array('@field' => $field_name)));
-    array_unshift($uses_list, ['ENTITY TYPE', "BUNDLE"]);
-    drush_print_table($uses_list, TRUE);
-  }
-  else {
-    drush_print(dt('@field is never used.', array('@field' => $field_name)));
-  }
-
   drush_print(' ');
   drush_print('+++++++++++++++++++++++++++++++++++++++++++++++++++');
   drush_print(' ');
-
-  // 2. Retrieving content type having translation mode other than
-  // Entity translation.
-  $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2), $field_name);
-  if (!$types) {
-    drush_print(dt('All content types are using "Entity translation" mode'));
-  }
-
-  // For next steps, we load need the full list of content types using
-  // body fields.
-  $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2, 4), $field_name);
-
-  $update_start = $timestamp;
-  $type_names = array_keys($types);
-  $field_data_name = 'field_data_' . $field_name;
-  $field_revision_name = 'field_revision_' . $field_name;
-
-  $query = db_select($field_revision_name, 'frb');
-  $query->join('node_revision', 'nr', 'nr.vid = frb.revision_id');
-  $query->condition('frb.entity_type', 'node')
-    ->condition('nr.timestamp', $update_start, '>=')
-    ->condition('frb.bundle', $type_names, 'IN');
-  $query->fields('frb', array('bundle'));
-  $query->addExpression('count(frb.entity_id)', 'revision_count');
-  $query->groupBy("frb.bundle");
-  $revision_results = $query->execute()->fetchAllAssoc('bundle');
-
-  $query = db_select($field_data_name, 'fdb');
-  $query->join('node', 'n', 'n.nid = fdb.entity_id');
-  $query->condition('fdb.entity_type', 'node')
-    ->condition('n.changed', $update_start, '>=')
-    ->condition('fdb.bundle', $type_names, 'IN');
-  $query->fields('fdb', array('bundle'));
-  $query->addExpression('count(fdb.entity_id)', 'content_count');
-  $query->groupBy("fdb.bundle");
-  $content_results = $query->execute()->fetchAllAssoc('bundle');
-
-  $query = db_select($field_data_name, 'fdb');
-  $query->join('node', 'n', 'n.nid = fdb.entity_id');
-  $query->condition('fdb.entity_type', 'node');
-  $query->fields('fdb', array('bundle'));
-  $query->addExpression('count(fdb.entity_id)', 'total_count');
-  $query->groupBy("fdb.bundle");
-  $total_results = $query->execute()->fetchAllAssoc('bundle');
-
-  drush_print(' ');
-  $date = new DateTime("@" . $timestamp);
-  $date->setTimezone(new DateTimeZone('Europe/Brussels'));
-  $str_date = $date->format('d/m/y H:i:s');
-  drush_print(dt('Statistics about content created/edited after @date with values in the field:', array('@date' => $str_date)));
-  drush_print('=========================================================================================');
-  $values = array();
-  $values[] = array(
-    dt('CONTENT TYPE'),
-    dt('TRANSLATION MODE'),
-    dt('NODE #'),
-    dt('NODE REVISION #'),
-    dt('NODE TOTAL #'),
-  );
-  foreach ($types as $machine_name => $type) {
-    $content_nr = 0;
-    if (isset($content_results[$machine_name]) && $content_results[$machine_name]->content_count) {
-      $content_nr = $content_results[$machine_name]->content_count;
-    }
-    $revision_nr = 0;
-    if (isset($revision_results[$machine_name]) && $revision_results[$machine_name]->revision_count) {
-      $revision_nr = $revision_results[$machine_name]->revision_count;
-    }
-    $total = 0;
-    if (isset($total_results[$machine_name]) && $total_results[$machine_name]->total_count) {
-      $total = $total_results[$machine_name]->total_count;
+  if (!$scan_entity_use_only) {
+    // 2. Retrieving content type having translation mode other than
+    // Entity translation.
+    $types = _body_fix_list_get_content_type_by_translation_mode([0, 1, 2], $field_name);
+    if (!$types) {
+      drush_print(dt('All content types are using "Entity translation" mode'));
     }
 
-    $trans_mode = $type->trans_mode;
-    $trans_label = _body_fix_list_get_translation_mode_label($trans_mode);
+    // For next steps, we load need the full list of content types using
+    // body fields.
+    $types = _body_fix_list_get_content_type_by_translation_mode([0, 1, 2, 4], $field_name);
+
+    $update_start = $timestamp;
+    $type_names = array_keys($types);
+    $field_data_name = 'field_data_' . $field_name;
+    $field_revision_name = 'field_revision_' . $field_name;
+
+    $query = db_select($field_revision_name, 'frb');
+    $query->join('node_revision', 'nr', 'nr.vid = frb.revision_id');
+    $query->condition('frb.entity_type', 'node')
+      ->condition('nr.timestamp', $update_start, '>=')
+      ->condition('frb.bundle', $type_names, 'IN');
+    $query->fields('frb', array('bundle'));
+    $query->addExpression('count(frb.entity_id)', 'revision_count');
+    $query->groupBy("frb.bundle");
+    $revision_results = $query->execute()->fetchAllAssoc('bundle');
+
+    $query = db_select($field_data_name, 'fdb');
+    $query->join('node', 'n', 'n.nid = fdb.entity_id');
+    $query->condition('fdb.entity_type', 'node')
+      ->condition('n.changed', $update_start, '>=')
+      ->condition('fdb.bundle', $type_names, 'IN');
+    $query->fields('fdb', array('bundle'));
+    $query->addExpression('count(fdb.entity_id)', 'content_count');
+    $query->groupBy("fdb.bundle");
+    $content_results = $query->execute()->fetchAllAssoc('bundle');
+
+    $query = db_select($field_data_name, 'fdb');
+    $query->join('node', 'n', 'n.nid = fdb.entity_id');
+    $query->condition('fdb.entity_type', 'node');
+    $query->fields('fdb', array('bundle'));
+    $query->addExpression('count(fdb.entity_id)', 'total_count');
+    $query->groupBy("fdb.bundle");
+    $total_results = $query->execute()->fetchAllAssoc('bundle');
+
+    drush_print(' ');
+    $date = new DateTime("@" . $timestamp);
+    $date->setTimezone(new DateTimeZone('Europe/Brussels'));
+    $str_date = $date->format('d/m/y H:i:s');
+    drush_print(dt('Statistics about content created/edited after @date with values in the field:', array('@date' => $str_date)));
+    drush_print('=========================================================================================');
+    $values = array();
     $values[] = array(
-      $machine_name,
-      $trans_label,
-      $content_nr,
-      $revision_nr,
-      $total,
+      dt('CONTENT TYPE'),
+      dt('TRANSLATION MODE'),
+      dt('NODE #'),
+      dt('NODE REVISION #'),
+      dt('NODE TOTAL #'),
     );
+    foreach ($types as $machine_name => $type) {
+      $content_nr = 0;
+      if (isset($content_results[$machine_name]) && $content_results[$machine_name]->content_count) {
+        $content_nr = $content_results[$machine_name]->content_count;
+      }
+      $revision_nr = 0;
+      if (isset($revision_results[$machine_name]) && $revision_results[$machine_name]->revision_count) {
+        $revision_nr = $revision_results[$machine_name]->revision_count;
+      }
+      $total = 0;
+      if (isset($total_results[$machine_name]) && $total_results[$machine_name]->total_count) {
+        $total = $total_results[$machine_name]->total_count;
+      }
+
+      $trans_mode = $type->trans_mode;
+      $trans_label = _body_fix_list_get_translation_mode_label($trans_mode);
+      $values[] = array(
+        $machine_name,
+        $trans_label,
+        $content_nr,
+        $revision_nr,
+        $total,
+      );
+    }
+    drush_print_table($values, TRUE);
   }
-  drush_print_table($values, TRUE);
   drush_print('');
-  drush_print(dt('End sacnning "@name" site (@url)', array('@name' => $site_name, '@url' => $base_url)));
+  drush_print(dt('End scanning "@name" site (@url)', array('@name' => $site_name, '@url' => $base_url)));
   drush_print('');
 }
 
