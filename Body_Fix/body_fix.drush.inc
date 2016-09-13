@@ -20,7 +20,7 @@ function body_fix_drush_command() {
   $items['translation-mode-statistics'] = array(
     'description' => 'Gives statistics about contents created created after a specific time.',
     'arguments' => array(
-      'timestamp' => 'The timestamp of the specific time to use as reference in the report.',
+      'timestamp' => 'The timestamp of the specific time to use as reference in the report. (default value: 1472562000)',
     ),
     'aliases' => array('tms'),
   );
@@ -32,15 +32,19 @@ function body_fix_drush_command() {
  * Drush command callback. drush_body_fix_translation_mode_statistics.
  */
 function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
-
+  $field_name = 'body';
   global $base_url;
   $site_name = variable_get('site_name', 'Unnamed site');
-
-  drush_print(dt('Start body_fix_list_impacted_sites for "@name" site (@url)', array('@name' => $site_name, '@url' => $base_url)));
+  $param = array(
+    '@name' => $site_name,
+    '@url' => $base_url,
+    '@field' => $field_name,
+  );
+  drush_print(dt('Start scanning "@name" site (@url) for the @field', $param));
   drush_print('');
   require_once DRUPAL_ROOT . '/includes/install.inc';
 
-  // 1. Check the situation about the module "Nexteuropa Cod" module and the
+  // 1. Check the situation about the module "Nexteuropa Core" module and the
   // execution of the hook_update_7003.
   $schema_version = drupal_get_installed_schema_version('nexteuropa_core');
 
@@ -54,20 +58,57 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
     drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is executed!'));
   }
 
+  drush_print(' ');
+  drush_print('+++++++++++++++++++++++++++++++++++++++++++++++++++');
+  drush_print(' ');
+
+  // 2. Current value for the body translatable flag.
+  $field_info = field_info_field($field_name);
+  $flag = $field_info['translatable'];
+  $cardinality = ($field_info['cardinality'] > 0) ? $field_info['cardinality'] : 'Unlimited';
+
+  drush_print(dt('@field translatable: @flag', array('@flag' => $flag, '@field' => $field_name)));
+  drush_print(dt('@field cardinality: @cardinality', array('@cardinality' => $cardinality, '@field' => $field_name)));
+
+  $uses_list = array();
+  $instances = field_info_instances();
+  foreach ($instances as $entity_type => $type_bundles) {
+    foreach ($type_bundles as $bundle => $bundle_instances) {
+      if (isset($bundle_instances[$field_name])) {
+        $uses_list[] = [$entity_type, $bundle];
+      }
+    }
+  }
+  if ($uses_list) {
+    drush_print(dt('Use of @field:', array('@field' => $field_name)));
+    array_unshift($uses_list, ['ENTITY TYPE', "BUNDLE"]);
+    drush_print_table($uses_list, TRUE);
+  }
+  else {
+    drush_print(dt('@field is never used.', array('@field' => $field_name)));
+  }
+
+  drush_print(' ');
+  drush_print('+++++++++++++++++++++++++++++++++++++++++++++++++++');
+  drush_print(' ');
+
   // 2. Retrieving content type having translation mode other than
   // Entity translation.
-  $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2));
+  $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2), $field_name);
   if (!$types) {
     drush_print(dt('All content types are using "Entity translation" mode'));
   }
 
   // For next steps, we load need the full list of content types using
   // body fields.
-  $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2, 4));
+  $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2, 4), $field_name);
 
   $update_start = $timestamp;
   $type_names = array_keys($types);
-  $query = db_select('field_revision_body', 'frb');
+  $field_data_name = 'field_data_' . $field_name;
+  $field_revision_name = 'field_revision_' . $field_name;
+
+  $query = db_select($field_revision_name, 'frb');
   $query->join('node_revision', 'nr', 'nr.vid = frb.revision_id');
   $query->condition('frb.entity_type', 'node')
     ->condition('nr.timestamp', $update_start, '>=')
@@ -77,7 +118,7 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
   $query->groupBy("frb.bundle");
   $revision_results = $query->execute()->fetchAllAssoc('bundle');
 
-  $query = db_select('field_data_body', 'fdb');
+  $query = db_select($field_data_name, 'fdb');
   $query->join('node', 'n', 'n.nid = fdb.entity_id');
   $query->condition('fdb.entity_type', 'node')
     ->condition('n.changed', $update_start, '>=')
@@ -87,7 +128,7 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
   $query->groupBy("fdb.bundle");
   $content_results = $query->execute()->fetchAllAssoc('bundle');
 
-  $query = db_select('field_data_body', 'fdb');
+  $query = db_select($field_data_name, 'fdb');
   $query->join('node', 'n', 'n.nid = fdb.entity_id');
   $query->condition('fdb.entity_type', 'node');
   $query->fields('fdb', array('bundle'));
@@ -99,8 +140,8 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
   $date = new DateTime("@" . $timestamp);
   $date->setTimezone(new DateTimeZone('Europe/Brussels'));
   $str_date = $date->format('d/m/y H:i:s');
-  drush_print(dt('Statistics about content created/edited after @date', array('@date' => $str_date)));
-  drush_print('==================================================================');
+  drush_print(dt('Statistics about content created/edited after @date with values in the field:', array('@date' => $str_date)));
+  drush_print('=========================================================================================');
   $values = array();
   $values[] = array(
     dt('CONTENT TYPE'),
@@ -135,7 +176,7 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
   }
   drush_print_table($values, TRUE);
   drush_print('');
-  drush_print(dt('End body_fix_list_impacted_sites for "@name" site (@url)', array('@name' => $site_name, '@url' => $base_url)));
+  drush_print(dt('End sacnning "@name" site (@url)', array('@name' => $site_name, '@url' => $base_url)));
   drush_print('');
 }
 
@@ -143,6 +184,7 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
  * Drush command callback. drush_body_fix_list_impacted_sites.
  */
 function drush_body_fix_list_impacted_sites() {
+  $field_name = 'body';
   $complete_report = drush_get_option('complete-report', 0);
   $message_table_sep = ($complete_report) ? ':' : '';
   require_once DRUPAL_ROOT . '/includes/install.inc';
@@ -151,30 +193,32 @@ function drush_body_fix_list_impacted_sites() {
 
   drush_print(dt('Start body_fix_list_impacted_sites for "@name" site (@url)', array('@name' => $site_name, '@url' => $base_url)));
   drush_print('');
+  if ($field_name == 'body') {
+    // 1. Check the situation about the module "Nexteuropa Cod" module and the
+    // execution of the hook_update_7003.
+    $schema_version = drupal_get_installed_schema_version('nexteuropa_core');
 
-  // 1. Check the situation about the module "Nexteuropa Cod" module and the
-  // execution of the hook_update_7003.
-  $schema_version = drupal_get_installed_schema_version('nexteuropa_core');
-
-  if ($schema_version == SCHEMA_UNINSTALLED) {
-    drush_print(dt('"Nexteuropa Core" module is not enabled!'));
+    if ($schema_version == SCHEMA_UNINSTALLED) {
+      drush_print(dt('"Nexteuropa Core" module is not enabled!'));
+    }
+    elseif ($schema_version < 7003) {
+      drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is NOT executed!'));
+    }
+    else {
+      drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is executed'));
+    }
   }
-  elseif ($schema_version < 7003) {
-    drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is NOT executed!'));
-  }
-  else {
-    drush_print(dt('hook_update_7003 of the "Nexteuropa Core module is executed!'));
-  }
-
-  // 2. Current value for the body flag.
-  $field_info = field_info_field('body');
-  $flag = $field_info['translatable'];
 
   drush_print(' ');
   drush_print('+++++++++++++++++++++++++++++++++++++++++++++++++++');
   drush_print(' ');
+  // 2. Current value for the body translatable flag.
+  $field_info = field_info_field($field_name);
+  $flag = $field_info['translatable'];
+  $cardinality = ($field_info['cardinality'] > 0) ? $field_info['cardinality'] : 'Unlimited';
 
   drush_print(dt('Body translatable: @flag', array('@flag' => $flag)));
+  drush_print(dt('Body cardinality: @cardinality', array('@cardinality' => $cardinality)));
 
   // 4. Retrieving content type having translation mode other than Entity
   // translation.
