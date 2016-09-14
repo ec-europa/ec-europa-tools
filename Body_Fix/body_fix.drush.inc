@@ -28,8 +28,116 @@ function body_fix_drush_command() {
     ),
     'aliases' => array('tms'),
   );
+  $items['content-translation-statistics'] = array(
+    'description' => 'Gives statistics about contents using Content translation.',
+    'aliases' => array('cms'),
+  );
 
   return $items;
+}
+
+/**
+ * Drush command callback. drush_body_fix_content_translation_statistics.
+ */
+function drush_body_fix_content_translation_statistics() {
+  $trans_mode = array(2);
+
+  global $base_url;
+  $site_name = variable_get('site_name', 'Unnamed site');
+  $param = array(
+    '@name' => $site_name,
+    '@url' => $base_url,
+  );
+  drush_print(dt('Start Content translation statistics in the "@name" site (@url)', $param));
+  drush_print('');
+  $types = _body_fix_list_get_content_type_by_translation_mode($trans_mode);
+  $type_names = array_keys($types);
+
+  // Retrieve the number of content created by content type
+  // (translation excluded).
+  $query = db_select('node', 'n');
+  $query->condition('n.type', $type_names, 'IN');
+  $query->fields('n', array('type'));
+  $query->addExpression('count(n.nid)', 'total_count');
+  $query->groupBy("n.type");
+  $total_results = $query->execute()->fetchAllAssoc('type');
+
+  // Retrieve the number of translations made by content type:
+  // source content excluded;
+  // All languages are mixed in the count.
+  $query = db_select('node', 'n');
+  $query->condition('n.type', $type_names, 'IN')
+        ->condition('n.tnid', 0, '<>');
+  $query->where('n.tnid <> n.nid');
+  $query->fields('n', array('type'));
+  $query->addExpression('count(n.nid)', 'total_count');
+  $query->groupBy("n.type");
+  $translation_results = $query->execute()->fetchAllAssoc('type');
+
+  // Retrieve the number of translations made by content type:
+  // - Source content excluded;
+  // - All languages are mixed in the count;
+  // - The count only include translation having a draft AND a
+  // Published revision.
+  $query = db_select('node', 'n');
+  $query->join('workbench_moderation_node_history', 'wmnh ', 'n.nid = wmnh.nid');
+  $query->condition('n.type', $type_names, 'IN')
+        ->condition('n.status', 1, '=')
+        ->condition('n.tnid', 0, '<>')
+        ->condition('wmnh.is_current', 1, '=')
+        ->condition('wmnh.state', "published", '<>');
+  $query->where('n.tnid <> n.nid');
+  $query->fields('n', array('type'));
+  $query->addExpression('count(n.nid)', 'total_count');
+  $query->groupBy("n.type");
+  $dp_trans_results = $query->execute()->fetchAllAssoc('type');
+
+  drush_print(' ');
+  $date = new DateTime();
+  $date->setTimezone(new DateTimeZone('Europe/Brussels'));
+  $str_date = $date->format('d/m/y H:i:s');
+  drush_print(dt('Statistics about content created/edited after @date with values in the field:', array('@date' => $str_date)));
+  drush_print('=========================================================================================');
+  $values = array();
+  $values[] = array(
+    dt('CONTENT TYPE'),
+    dt('CONTRIBUTED NODE #'),
+    dt('TRANSLATIONS #'),
+    dt('TRANSLATIONS # (DRAFT & PUBLISHED)'),
+  );
+  drush_print(dt('Column "CONTRIBUTED NODE #": Gives the number of content created for this content type. 
+  Translations are excluded from the count.'));
+  drush_print(dt('Column "TRANSLATIONS #": Gives the number of translations made for this content type. 
+  Source contents are excluded from the count.'));
+  drush_print(dt('Column "TRANSLATIONS # (DRAFT & PUBLISHED)": Gives the number of translations made for this content type that
+  have a Draft revision and a Published revision. Source contents are excluded from the count.'));
+  drush_print(' ');
+  foreach ($types as $machine_name => $type) {
+    $total = 0;
+    if (isset($total_results[$machine_name]) && $total_results[$machine_name]->total_count) {
+      $total = $total_results[$machine_name]->total_count;
+    }
+    $translations = 0;
+    if (isset($translation_results[$machine_name]) && $translation_results[$machine_name]->total_count) {
+      $translations = $translation_results[$machine_name]->total_count;
+    }
+    $dp_trans = 0;
+    if (isset($dp_trans_results[$machine_name]) && $dp_trans_results[$machine_name]->total_count) {
+      $dp_trans = $dp_trans_results[$machine_name]->total_count;
+    }
+
+    $values[] = array(
+      $machine_name,
+      $total,
+      $translations,
+      $dp_trans,
+    );
+  }
+  drush_print_table($values, TRUE, [30, 18, 15, 35]);
+
+  drush_print('');
+  drush_print(dt('End Content translation statistics  for "@name" site (@url)', $param));
+  drush_print('');
 }
 
 /**
@@ -103,14 +211,14 @@ function drush_body_fix_translation_mode_statistics($timestamp = 1472562000) {
   if (!$scan_entity_use_only) {
     // 2. Retrieving content type having translation mode other than
     // Entity translation.
-    $types = _body_fix_list_get_content_type_by_translation_mode([0, 1, 2], $field_name);
+    $types = _body_fix_list_get_filtered_content_type_by_translation_mode([0, 1, 2], $field_name);
     if (!$types) {
       drush_print(dt('All content types are using "Entity translation" mode'));
     }
 
     // For next steps, we load need the full list of content types using
     // body fields.
-    $types = _body_fix_list_get_content_type_by_translation_mode([0, 1, 2, 4], $field_name);
+    $types = _body_fix_list_get_filtered_content_type_by_translation_mode([0, 1, 2, 4], $field_name);
 
     $update_start = $timestamp;
     $type_names = array_keys($types);
@@ -232,7 +340,7 @@ function drush_body_fix_list_impacted_sites() {
 
   // 4. Retrieving content type having translation mode other than Entity
   // translation.
-  $types = _body_fix_list_get_content_type_by_translation_mode(array(0, 1, 2, 4));
+  $types = _body_fix_list_get_filtered_content_type_by_translation_mode(array(0, 1, 2, 4));
 
   $query = db_select('field_data_body', 'fdb');
   $query->join('node', 'n', 'fdb.entity_id = n.nid');
@@ -582,7 +690,7 @@ function _body_fix_list_get_translation_mode_label($mode) {
  * @return array
  *   An array of node types, as objects, keyed by the type.
  */
-function _body_fix_list_get_content_type_by_translation_mode($modes = array(), $field_name = 'body') {
+function _body_fix_list_get_filtered_content_type_by_translation_mode($modes = array(), $field_name = 'body') {
   $types = node_type_get_types();
   if (!$modes) {
     $modes = array(0, 1, 2, 4);
@@ -594,6 +702,38 @@ function _body_fix_list_get_content_type_by_translation_mode($modes = array(), $
     $is_field_used = field_info_instance('node', $field_name, $machine_name);
     if (in_array($translation_mode, $modes) && $is_field_used) {
       $type_info->trans_mode = $translation_mode;
+      $filtered_types[$machine_name] = $type_info;
+    }
+  }
+
+  return $filtered_types;
+}
+
+/**
+ * Returns all the available node types for a specific translation modes.
+ *
+ * @param array $modes
+ *   Array containing translation mode codes of the  to use as filter>.
+ *   Possible code are:
+ *   - 0: Multilingual support disabled;
+ *   - 1: Multilingual support enabled;
+ *   - 2: Multilingual support with translation (Content translation);
+ *   - 4: Multilingual support with field translation (Entity translation).
+ *
+ * @return array
+ *   An array of node types, as objects, keyed by the type.
+ */
+function _body_fix_list_get_content_type_by_translation_mode($modes = array()) {
+  $types = node_type_get_types();
+  if (!$modes) {
+    $modes = array(0, 1, 2, 4);
+  }
+  $filtered_types = array();
+
+  foreach ($types as $machine_name => $type_info) {
+    $translation_mode = variable_get('language_content_type_' . $machine_name);
+    $type_info->trans_mode = $translation_mode;
+    if (in_array($translation_mode, $modes)) {
       $filtered_types[$machine_name] = $type_info;
     }
   }
