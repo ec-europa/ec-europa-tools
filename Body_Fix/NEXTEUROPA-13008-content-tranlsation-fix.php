@@ -196,10 +196,8 @@ class ContentTranslationFixProcessor {
       ],
     ];
     $node->revision = TRUE;
-    // We keep body revisions for backup.
-    // db_query("DELETE FROM {field_revision_body} WHERE entity_type = 'node' AND entity_id = '{$revision['entity_id']}' AND revision_id = '{$revision['revision_id']}' AND language = '{$revision['language']}'")->execute();
-    db_query("DELETE FROM {field_data_body} WHERE entity_type = 'node' AND entity_id = '{$revision['entity_id']}' AND revision_id = '{$revision['revision_id']}' AND language = '{$revision['language']}'")->execute();
     node_save($node);
+    db_query("DELETE FROM {field_data_body} WHERE entity_type = 'node' AND entity_id = '{$revision['entity_id']}' AND language != 'und'")->execute();
     echo '.';
   }
 
@@ -222,3 +220,7 @@ echo PHP_EOL . 'Done.' . PHP_EOL;
 echo 'Nodes with translation: ' . $content_translation . PHP_EOL;
 echo 'Nodes with translation disabled: ' . $disabled_translation . PHP_EOL;
 echo 'Total: ' . ($content_translation + $disabled_translation) . PHP_EOL;
+
+echo 'Clearing cache...' . PHP_EOL;
+cache_clear_all();
+echo 'Done.' . PHP_EOL;
