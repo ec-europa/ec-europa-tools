@@ -155,6 +155,14 @@ function drush_multilingual_audit_check_modules() {
 function drush_multilingual_audit_check_fields() {
   $result = array();
 
+  $site = drush_get_context('DRUSH_TARGET_SITE_ALIAS');
+
+  if (empty($site)) {
+    $site = variable_get('site_name');
+  }
+
+  drush_print(sprintf("Checking fields on site: %s", $site));
+
   // TODO: Add modules to check in the command options.
   $fields_to_check = array(
     'entityreference',
@@ -163,7 +171,7 @@ function drush_multilingual_audit_check_fields() {
   );
 
   foreach ($fields_to_check as $field_type) {
-    $map = field_info_field_map();
+    $map = field_info_fields();
 
     $info = array_filter(field_info_fields(), function($item) use ($field_type){
       return $item['type'] == $field_type;
@@ -176,10 +184,14 @@ function drush_multilingual_audit_check_fields() {
 
       foreach($map[$field_name]['bundles'] as $entity => $bundles) {
         foreach($bundles as $bundle) {
-          $query = new EntityFieldQuery();
-          $query->entityCondition('entity_type', $entity)
-            ->entityCondition('bundle', $bundle);
-          $count = $query->count()->execute();
+          try {
+            $query = new EntityFieldQuery();
+            $query->entityCondition('entity_type', $entity)
+              ->entityCondition('bundle', $bundle);
+            $count = $query->count()->execute();
+          } catch (Exception $e) {
+            drush_log($e->getMessage(), 'error');
+          }
 
           $has_content = $count >= 1 ? dt('Yes') : dt('No');
           $total += $count;
