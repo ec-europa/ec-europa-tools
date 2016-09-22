@@ -67,9 +67,13 @@ class ContentTranslationFixProcessor {
    *   Object containing an array of NID and node type.
    */
   public function getLatestContent() {
+    // EECA subsite case where changed column is having entries equal to 0.
+    $or = db_or()
+      ->condition('n.created', self::DEPLOYMENT_DATE, '>=')
+      ->condition('n.changed', self::DEPLOYMENT_DATE, '>=');
     $query = db_select('node', 'n')
       ->fields('n', ['nid', 'type'])
-      ->condition('n.changed', self::DEPLOYMENT_DATE, '>=');
+      ->condition($or);
     return $query->execute()->fetchAll();
   }
 
