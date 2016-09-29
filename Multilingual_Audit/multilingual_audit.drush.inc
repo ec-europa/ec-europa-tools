@@ -165,6 +165,7 @@ function drush_multilingual_audit_check_fields() {
 
   // TODO: Add modules to check in the command options.
   $fields_to_check = array(
+    'taxonomy_term_reference',
     'entityreference',
     'field_collection',
     'paragraphs',
