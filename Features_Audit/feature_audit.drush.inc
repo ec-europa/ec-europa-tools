@@ -31,13 +31,15 @@ function feature_audit_drush_command() {
   return $items;
 }
 
+/**
+ * Drush command callback.
+ */
 function drush_feature_audit_check_wysiwyg_text_formats() {
   $results = array();
   // 1.- Gets activates text formats with WYSIWYG profiles
   $text_formats = filter_formats();
   $field_to_check = _feature_audit_get_type_fields_list(['text_long', 'text_with_summary', 'text']);
   foreach ($text_formats as $format_id => $format) {
-    drush_print($format_id);
     if (module_exists('wysiwyg')) {
       module_load_include('module', 'wysiwyg', 'wysiwyg');
       $profile = wysiwyg_profile_load($format_id);
@@ -65,7 +67,6 @@ function drush_feature_audit_check_wysiwyg_text_formats() {
                }
             }
 
-            drush_print('1 ' . $format_id);
             $results[$format_id] = array(
               'text-format' => $format->name,
               'wysiwyg-editor' => $profile->editor,
@@ -74,7 +75,6 @@ function drush_feature_audit_check_wysiwyg_text_formats() {
             );
           }
           else {
-            drush_print('2 ' .$format_id);
             $results[$format_id] = array(
               'text-format' => $format->name,
               'wysiwyg-editor' => $profile->editor,
@@ -84,7 +84,6 @@ function drush_feature_audit_check_wysiwyg_text_formats() {
           }
         }
         else {
-          drush_print('3 ' . $format_id);
           $results[$format_id] = array(
             'text-format' => $format->name,
             'wysiwyg-editor' => $profile->editor,
@@ -94,7 +93,6 @@ function drush_feature_audit_check_wysiwyg_text_formats() {
         }
       }
       else {
-        drush_print('4 ' . $format_id);
         $results[$format_id] = array(
           'text-format' => $format->name,
           'wysiwyg-editor' => 'None',
@@ -104,8 +102,6 @@ function drush_feature_audit_check_wysiwyg_text_formats() {
       }
     }
     else {
-      $keys = array_keys($results);
-      drush_print('5 ' . implode(', ', $keys));
       // If module does not exist, we can bypass the full process and
       // return a light table.
       $results[$format_id] = array(
@@ -118,8 +114,6 @@ function drush_feature_audit_check_wysiwyg_text_formats() {
   }
 
   //4.- Format and return the results
-  $keys = array_keys($results);
-  drush_print('6 ' . implode(', ', $keys));
   return $results;
 }
 
