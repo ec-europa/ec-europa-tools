@@ -70,10 +70,10 @@ function drush_feature_audit_check_wysiwyg_text_formats() {
             $has_tracked_changes = array();
             $field_names = array_keys($field_to_check);
             foreach ($field_names as $field_name) {
-               $db_or = db_or()->condition($field_name . '_value', '%ice-ins%','LIKE')->condition($field_name . '_value', '%ice-del%','LIKE');
+               //$db_or = db_or()->condition($field_name . '_value', '%ice-ins%','LIKE')->condition($field_name . '_value', '%ice-del%','LIKE');
                $query = db_select('field_revision_' . $field_name, 'fr');
                $query->condition($field_name . '_format', $format_id)
-                     ->condition($db_or);
+                     ->where('fr.' . $field_name . '_value REGEXP \'<span[^>]+class="[^"]*ice-[^>]+>\'');
                $query->fields('fr', array('entity_type', 'bundle'));
                $query->distinct(TRUE);
                $query->orderBy('entity_type')->orderBy('bundle');
@@ -159,13 +159,13 @@ function drush_feature_audit_check_change_tracked_contents() {
   $field_to_check = _feature_audit_get_type_fields_list(['text_long', 'text_with_summary', 'text']);
   $field_names = array_keys($field_to_check);
   foreach ($field_names as $field_name) {
-    $db_or_value = db_or()->condition('fr.' . $field_name . '_value', '%ice-ins%','LIKE')
-      ->condition('fr.' . $field_name . '_value', '%ice-del%','LIKE');
+    /*$db_or_value = db_or()->condition('fr.' . $field_name . '_value', '%ice-ins%','LIKE')
+      ->condition('fr.' . $field_name . '_value', '%ice-del%','LIKE');*/
     $db_or_state= db_or()->condition('wmhn.is_current', 1)->condition('wmhn.published', 1);
     $query = db_select('field_revision_' . $field_name, 'fr');
     $query->join('node', 'n', 'fr.entity_id = n.nid');
     $query->join('workbench_moderation_node_history', 'wmhn', 'fr.revision_id = wmhn.vid');
-    $query->condition($db_or_value)
+    $query->where('fr.' . $field_name . '_value REGEXP \'<span[^>]+class="[^"]*ice-[^>]+>\'')
           ->condition($db_or_state);
     $query->fields('fr', array('bundle', 'language', $field_name . '_format'))
           ->fields('n', array('nid', 'title'))
@@ -190,7 +190,7 @@ function drush_feature_audit_check_change_tracked_contents() {
           if (strpos($results[$entity_id]['concerned-fields'], $field_name) === FALSE) {
             $results[$entity_id]['concerned-fields'] .= ', ' . $field_name;
           }
-          if (strpos($results[$entity_id]['concerned-fields'], $format) === FALSE) {
+          if (strpos($results[$entity_id]['concerned-formats'], $format) === FALSE) {
             $results[$entity_id]['concerned-formats'] .= ', ' . $format;
           }
         }
