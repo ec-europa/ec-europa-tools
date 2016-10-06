@@ -11,10 +11,15 @@ This is related to ticket: NEPT-89
 ## Usage
 
 ```
-drush check-wysiwyg-text-formats or drush aliases
+drush check-wysiwyg-text-formats or drush facwf
 ```
-Check for each text format used in site: 
+Checks for each text format used in site: 
 * If it uses a WYSIWYG profile;
 * If the used WYSIWYG profile has CKEditor LITE plugin activated;
 * If field revisions using it contain tracked changes.
+
+```
+drush check-change-tracked-contents or drush facctc
+```
+Lists nodes having tracked changes in their text, long text or Long text with summary fields;
 

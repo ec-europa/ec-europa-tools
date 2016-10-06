@@ -28,6 +28,25 @@ function feature_audit_drush_command() {
     ),
   );
 
+  $items['check-change-tracked-contents'] = array(
+    'description' => 'List contents containing tracked changes in the current or/and the published revision.',
+    'aliases' => array('facctc'),
+    'outputformat' => array(
+      'default' => 'table',
+      'pipe-format' => 'csv',
+      'field-labels' => array(
+        'id' => 'Content Id',
+        'type' => 'Content type',
+        'title' => 'Content title',
+        'language' => 'Concerned languages',
+        'concerned-revisions' => 'Concerned revision(s) (state)',
+        'concerned-fields' => 'Concerned fields',
+        'concerned-formats' => 'Concerned formats',
+      ),
+      'output-data-type' => 'format-table',
+    ),
+  );
+
   return $items;
 }
 
@@ -111,6 +130,82 @@ function drush_feature_audit_check_wysiwyg_text_formats() {
         'ckeditor-lite' => 'No',
         'has_tracked_changes' => 'None'
       );
+    }
+  }
+
+  //4.- Format and return the results
+  return $results;
+}
+
+
+/**
+ * Drush command callback.
+ */
+function drush_feature_audit_check_change_tracked_contents() {
+  $results = array();
+
+  $site = drush_get_context('DRUSH_TARGET_SITE_ALIAS');
+
+  if (empty($site)) {
+    $site = variable_get('site_name');
+  }
+
+  if (!module_exists('wysiwyg')) {
+    drush_print(sprintf('The "Wysiwyg" module is not activated in the  site "%s"!', $site));
+    return;
+  }
+  drush_print(sprintf('The "Wysiwyg" module is activated in the  site "%s"!', $site));
+
+  $field_to_check = _feature_audit_get_type_fields_list(['text_long', 'text_with_summary', 'text']);
+  $field_names = array_keys($field_to_check);
+  foreach ($field_names as $field_name) {
+    $db_or_value = db_or()->condition('fr.' . $field_name . '_value', '%ice-ins%','LIKE')
+      ->condition('fr.' . $field_name . '_value', '%ice-del%','LIKE');
+    $db_or_state= db_or()->condition('wmhn.is_current', 1)->condition('wmhn.published', 1);
+    $query = db_select('field_revision_' . $field_name, 'fr');
+    $query->join('node', 'n', 'fr.entity_id = n.nid');
+    $query->join('workbench_moderation_node_history', 'wmhn', 'fr.revision_id = wmhn.vid');
+    $query->condition($db_or_value)
+          ->condition($db_or_state);
+    $query->fields('fr', array('bundle', 'language', $field_name . '_format'))
+          ->fields('n', array('nid', 'title'))
+          ->fields('wmhn', array('state'));
+    $query->addField('fr', $field_name . '_format', 'format');
+    $query->distinct(TRUE);
+    $query->orderBy('fr.bundle')->orderBy('n.nid');
+    $query_results = $query->execute()->fetchAllAssoc('bundle');
+    if ($query_results) {
+      foreach ($query_results as $query_result) {
+        $entity_id = $query_result->nid;
+        $language = $query_result->language;
+        $revision = $query_result->state;
+        $format = $query_result->format;
+        if (!empty($results[$entity_id])){
+          if (strpos($results[$entity_id]['language'], $language) === FALSE) {
+            $results[$entity_id]['language'] .= ', ' . $language;
+          }
+          if (strpos($results[$entity_id]['concerned-revisions'], $revision) === FALSE) {
+            $results[$entity_id]['concerned-revisions'] .= ', ' . $revision;
+          }
+          if (strpos($results[$entity_id]['concerned-fields'], $field_name) === FALSE) {
+            $results[$entity_id]['concerned-fields'] .= ', ' . $field_name;
+          }
+          if (strpos($results[$entity_id]['concerned-fields'], $format) === FALSE) {
+            $results[$entity_id]['concerned-formats'] .= ', ' . $format;
+          }
+        }
+        else {
+          $results[$entity_id] = array(
+            'id' => $entity_id,
+            'type' => $query_result->bundle,
+            'title' => $query_result->title,
+            'language' => $language,
+            'concerned-revisions' => $revision,
+            'concerned-fields' => $field_name,
+            'concerned-formats' => $format,
+          );
+        }
+      }
     }
   }
 
