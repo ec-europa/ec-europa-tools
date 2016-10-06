@@ -51,12 +51,14 @@ function drush_feature_audit_check_wysiwyg_text_formats() {
             $has_tracked_changes = array();
             $field_names = array_keys($field_to_check);
             foreach ($field_names as $field_name) {
+               $db_or = db_or()->condition($field_name . '_value', '%ice-ins%','LIKE')->condition($field_name . '_value', '%ice-del%','LIKE');
                $query = db_select('field_revision_' . $field_name, 'fr');
                $query->condition($field_name . '_format', $format_id)
-                     ->where($field_name . '_value REGEXP(:regex)', array(':regex' => '/<span[^>]+class="[^"]*ice-[^>]+>/'));
+                     ->condition($db_or);
                $query->fields('fr', array('entity_type', 'bundle'));
                $query->distinct(TRUE);
                $query->orderBy('entity_type')->orderBy('bundle');
+              drush_print($query->__toString());
                $query_results = $query->execute()->fetchAllAssoc('entity_type');
                if ($query_results) {
                  $value = array();
