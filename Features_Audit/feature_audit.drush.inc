@@ -58,7 +58,6 @@ function drush_feature_audit_check_wysiwyg_text_formats() {
                $query->fields('fr', array('entity_type', 'bundle'));
                $query->distinct(TRUE);
                $query->orderBy('entity_type')->orderBy('bundle');
-              drush_print($query->__toString());
                $query_results = $query->execute()->fetchAllAssoc('entity_type');
                if ($query_results) {
                  $value = array();
