@@ -194,7 +194,16 @@ function drush_multilingual_audit_check_fields() {
             drush_log($e->getMessage(), 'error');
           }
 
-          $has_content = $count >= 1 ? dt('Yes') : dt('No');
+          $has_content =  dt('No');
+          if ($count >= 1) {
+            $query = db_select('node', 'n');
+            $query->condition('n.type', $bundle)
+                  ->condition('n.tnid', 0, '<>');
+            $query->where('n.tnid <> n.nid');
+            $query->addExpression('count(n.nid)');
+            $translation_results = $query->execute()->fetchField();
+            $has_content = ($translation_results) ? dt('Translated!') : dt('Yes');
+          }
           $total += $count;
           $owners[] = sprintf("%s:%s(%s)", $entity, $bundle, $count);
         }
