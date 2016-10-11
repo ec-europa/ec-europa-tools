@@ -69,51 +69,6 @@ function drush_body_fix_content_translation_statistics() {
   $query->addExpression('count(n.nid)', 'total_count');
   $query->groupBy("n.type");
   $total_results = $query->execute()->fetchAllAssoc('type');
-
-  // Retrieve the number of translations made by content type:
-  // source content excluded;
-  // All languages are mixed in the count.
-  $query = db_select('node', 'n');
-  $query->condition('n.type', $type_names, 'IN')
-        ->condition('n.tnid', 0, '<>');
-  $query->where('n.tnid <> n.nid');
-  $query->fields('n', array('type'));
-  $query->addExpression('count(n.nid)', 'total_count');
-  $query->groupBy("n.type");
-  $translation_results = $query->execute()->fetchAllAssoc('type');
-
-  // Retrieve the number of translations made by content type:
-  // - Source content excluded;
-  // - All languages are mixed in the count;
-  // - The count only include translation having a draft AND a
-  // Published revision.
-  $query = db_select('node', 'n');
-  $query->join('workbench_moderation_node_history', 'wmnh ', 'n.nid = wmnh.nid');
-  $query->condition('n.type', $type_names, 'IN')
-        ->condition('n.status', 1, '=')
-        ->condition('n.tnid', 0, '<>')
-        ->condition('wmnh.is_current', 1, '=')
-        ->condition('wmnh.state', "published", '<>');
-  $query->where('n.tnid <> n.nid');
-  $query->fields('n', array('type'));
-  $query->addExpression('count(n.nid)', 'total_count');
-  $query->groupBy("n.type");
-  $dp_trans_results = $query->execute()->fetchAllAssoc('type');
-
-  drush_print(' ');
-  $date = new DateTime();
-  $date->setTimezone(new DateTimeZone('Europe/Brussels'));
-  $str_date = $date->format('d/m/y H:i:s');
-  drush_print(dt('Statistics about content created/edited after @date with values in the field:', array('@date' => $str_date)));
-  drush_print('=========================================================================================');
-  $values = array();
-  drush_print(dt('Column "CONTRIBUTED NODE #": Gives the number of content created for this content type. 
-  Translations are excluded from the count.'));
-  drush_print(dt('Column "TRANSLATIONS #": Gives the number of translations made for this content type. 
-  Source contents are excluded from the count.'));
-  drush_print(dt('Column "TRANSLATIONS # (DRAFT & PUBLISHED)": Gives the number of translations made for this content type that
-  have a Draft revision and a Published revision. Source contents are excluded from the count.'));
-  drush_print(' ');
   foreach ($types as $machine_name => $type) {
     $total = 0;
     if (isset($total_results[$machine_name]) && $total_results[$machine_name]->total_count) {
@@ -128,13 +83,79 @@ function drush_body_fix_content_translation_statistics() {
       $dp_trans = $dp_trans_results[$machine_name]->total_count;
     }
     $translation_mode = variable_get('language_content_type_' . $machine_name);
+    switch ($translation_mode) {
+      case 0:
 
+        $translations = 'N/A';
+        $dp_trans = 'N/A';
+        break;
+
+      case 1:
+      case 2:
+        // Retrieve the number of translations made by content type:
+        // source content excluded;
+        // All languages are mixed in the count.
+        $query = db_select('node', 'n');
+        $query->condition('n.type', $machine_name)
+              ->condition('n.tnid', 0, '<>');
+        $query->where('n.tnid <> n.nid');
+        $query->addExpression('count(n.nid)', 'total_count');
+        $translations = $query->execute()->fetchField();
+
+        // Retrieve the number of translations made by content type:
+        // - Source content excluded;
+        // - All languages are mixed in the count;
+        // - The count only include translation having a draft AND a
+        // Published revision.
+        $query = db_select('node', 'n');
+        $query->join('workbench_moderation_node_history', 'wmnh', 'n.nid = wmnh.nid');
+        $query->condition('n.type', $machine_name)
+              ->condition('n.status', 1, '=')
+              ->condition('n.tnid', 0, '<>')
+              ->condition('wmnh.is_current', 1, '=')
+              ->condition('wmnh.state', "published", '<>');
+        $query->where('n.tnid <> n.nid');
+        $query->addExpression('count(n.nid)', 'total_count');
+        $dp_trans = $query->execute()->fetchField();
+        break;
+
+      case 4:
+        // Retrieve the number of translations made by content type:
+        // source content excluded;
+        // All languages are mixed in the count.
+        $query = db_select('node', 'n');
+        $query->join('entity_translation', 'et', 'n.nid = et.entity_id');
+        $query->condition('n.type', $machine_name)
+              ->condition('et.source', '', '<>')
+              ->condition('et.entity_type', 'node');
+        $query->isNotNull('et.source');
+        $query->addExpression('count(n.nid)', 'total_count');
+        $translations = $query->execute()->fetchField();
+
+        // Retrieve the number of translations made by content type:
+        // - Source content excluded;
+        // - All languages are mixed in the count;
+        // - The count only include translation having a draft AND a
+        // Published revision.
+        $query = db_select('node', 'n');
+        $query->join('workbench_moderation_node_history', 'wmnh', 'n.nid = wmnh.nid');
+        $query->join('entity_translation', 'et', 'n.nid = et.entity_id');
+        $query->condition('n.type', $machine_name)
+              ->condition('et.source', '', '<>')
+              ->condition('n.status', 1, '=')
+              ->condition('wmnh.is_current', 1, '=')
+              ->condition('wmnh.state', "published", '<>');
+        $query->isNotNull('et.source');
+        $query->addExpression('count(n.nid)', 'total_count');
+        $dp_trans = $query->execute()->fetchField();
+        break;
+    }
     $values[] = array(
       'type' => $machine_name,
       'mode' => _body_fix_list_get_translation_mode_label($translation_mode),
       'node' => $total,
-      'translation' => $translations,
-      'draft-published' => $dp_trans,
+      'translation' => ($translations) ? $translations : 0,
+      'draft-published' => ($dp_trans) ? $dp_trans : 0,
     );
   }
 
