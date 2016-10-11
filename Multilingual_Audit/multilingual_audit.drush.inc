@@ -106,13 +106,47 @@ function drush_multilingual_audit_check_wb_mod() {
  *
  * This callback check status of particular modules.
  */
-function drush_multilingual_audit_check_modules() {
+function drush_multilingual_audit_check_modules()
+{
   $result = array();
 
   $module_to_check = array(
     'i18n_select',
     'title',
   );
+
+  if (module_exists('locale')) {
+    $enabled_languages = locale_language_list();
+    $languages_count = count($enabled_languages);
+    if ($languages_count > 1) {
+      $result['languagues'] = array(
+        'package' => 'Core',
+        'name' => "Locale",
+        'type' => 'Languages',
+        'status' => 'Enabled',
+        'version' => $languages_count . ' languages'
+      );
+
+    }
+    else {
+      $result['languagues'] = array(
+        'package' => 'Core',
+        'name' => "Locale",
+        'type' => 'Languages',
+        'status' => 'Enabled',
+        'version' => '1 language'
+      );
+    }
+  }
+  else {
+    $result['languagues'] = array(
+      'package' => 'Core',
+      'name' => "Locale",
+      'type' => 'Languages',
+      'status' => 'Disabled',
+      'version' => 'N/A'
+    );
+  }
 
   $extension_info = drush_get_extensions(FALSE);
   uasort($extension_info, '_drush_pm_sort_extensions');
