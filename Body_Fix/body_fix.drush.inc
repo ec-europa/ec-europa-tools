@@ -30,7 +30,22 @@ function body_fix_drush_command() {
   );
   $items['content-translation-statistics'] = array(
     'description' => 'Gives statistics about contents using Content translation.',
-    'aliases' => array('cms'),
+    'aliases' => array('cts'),
+    'options' => array(
+      'scan-translation-mode' => 'Translation mode to scan (0 (disabled), 1 (enabled), 2 (Content translation), 4 (Entity translation)',
+    ),
+    'outputformat' => array(
+      'default' => 'table',
+      'pipe-format' => 'list',
+      'field-labels' => array(
+        'type' => 'CONTENT TYPE',
+        'mode' => 'TRANSLATION MODE',
+        'node' => 'CONTRIBUTED NODE #',
+        'translation' => 'TRANSLATIONS #',
+        'draft-published' => 'TRANSLATIONS # (DRAFT & PUBLISHED)'
+      ),
+      'output-data-type' => 'format-table',
+    ),
   );
 
   return $items;
@@ -40,16 +55,9 @@ function body_fix_drush_command() {
  * Drush command callback. drush_body_fix_content_translation_statistics.
  */
 function drush_body_fix_content_translation_statistics() {
-  $trans_mode = array(2);
+  $trans_mode = drush_get_option('scan-entity-use-only', array());
 
-  global $base_url;
-  $site_name = variable_get('site_name', 'Unnamed site');
-  $param = array(
-    '@name' => $site_name,
-    '@url' => $base_url,
-  );
-  drush_print(dt('Start Content translation statistics in the "@name" site (@url)', $param));
-  drush_print('');
+
   $types = _body_fix_list_get_content_type_by_translation_mode($trans_mode);
   $type_names = array_keys($types);
 
@@ -99,12 +107,6 @@ function drush_body_fix_content_translation_statistics() {
   drush_print(dt('Statistics about content created/edited after @date with values in the field:', array('@date' => $str_date)));
   drush_print('=========================================================================================');
   $values = array();
-  $values[] = array(
-    dt('CONTENT TYPE'),
-    dt('CONTRIBUTED NODE #'),
-    dt('TRANSLATIONS #'),
-    dt('TRANSLATIONS # (DRAFT & PUBLISHED)'),
-  );
   drush_print(dt('Column "CONTRIBUTED NODE #": Gives the number of content created for this content type. 
   Translations are excluded from the count.'));
   drush_print(dt('Column "TRANSLATIONS #": Gives the number of translations made for this content type. 
@@ -125,19 +127,18 @@ function drush_body_fix_content_translation_statistics() {
     if (isset($dp_trans_results[$machine_name]) && $dp_trans_results[$machine_name]->total_count) {
       $dp_trans = $dp_trans_results[$machine_name]->total_count;
     }
+    $translation_mode = variable_get('language_content_type_' . $machine_name);
 
     $values[] = array(
-      $machine_name,
-      $total,
-      $translations,
-      $dp_trans,
+      'type' => $machine_name,
+      'mode' => _body_fix_list_get_translation_mode_label($translation_mode),
+      'node' => $total,
+      'translation' => $translations,
+      'draft-published' => $dp_trans,
     );
   }
-  drush_print_table($values, TRUE, [30, 18, 15, 35]);
 
-  drush_print('');
-  drush_print(dt('End Content translation statistics  for "@name" site (@url)', $param));
-  drush_print('');
+  return $values;
 }
 
 /**
