@@ -41,7 +41,7 @@ function check_iframes_drush_command() {
  *
  * This callback checks where iframes are used in the site. .
  */
-function drush_check_iframes_search_iframe() {
+function drush_check_iframes_search_iframes() {
   $results = array();
   $site = drush_get_context('DRUSH_TARGET_SITE_ALIAS');
 
