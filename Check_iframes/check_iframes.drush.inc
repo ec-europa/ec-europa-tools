@@ -35,7 +35,6 @@ function check_iframes_drush_command() {
   return $items;
 }
 
-
 /**
  * Drush command callback.
  *
@@ -95,7 +94,7 @@ function drush_check_iframes_search_iframes() {
             'field_type' => $field_type,
             'nodeid' => $row['entity_id'],
             'title' => $node->title,
-            'is_avp' => ($check_iframe == 2)? 'AV PORTAL':'NO'
+            'is_avp' => ($check_iframe >= 2)? 'AV PORTAL':'NO'
           );
         }
       }
@@ -111,7 +110,7 @@ function drush_check_iframes_search_iframes() {
                 'field_type' => $field_type,
                 'nodeid' => $row['entity_id'],
                 'title' => $node->title,
-                'is_avp' => ($check_iframe == 2)? 'AV PORTAL':'NO',
+                'is_avp' => ($check_iframe >= 2)? 'AV PORTAL':'NO',
               );
            }
         }
@@ -121,21 +120,24 @@ function drush_check_iframes_search_iframes() {
   return $results;
 }
 
-
 /**
 * Function that checks if there is an iframe tag and if there is an AVPortal iframe in a string.
-* It will return 0, 1 (iframe), 2 (av-portal iframe).
+* It will return 0, 1 (iframe), 2 (av-portal iframe), 3 AVportal Old way.
 */
 function checksubsite_iframe($text) {
-  $test = 0;
   $pattern = "/(?:<iframe[^>]*)/";
   if (preg_match($pattern, decode_entities($text))) {
-    $test = 1;
-    //check if it's an AVPortal iframe
-    $pattern = "/(?:<iframe[^>]*).(?:avservices\/play.cfm)/";
+    // Check if it's an AVPortal iframe
+    $pattern = "/(?:<iframe[^>]*).(?:ec.europa.eu\/avservices\/play.cfm)/";
     if (preg_match($pattern, decode_entities($text)) ) {
-      $test = 2;
+      return 2;
     }
+    // check if it's a classic AV portal
+    $pattern = "/https:\/\/europa.eu/";
+    if (preg_match($pattern, decode_entities($text)) ) {
+      return 3;
+    }
+    return 1;
   }
-  return $test;
+  return 0;
 }
